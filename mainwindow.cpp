@@ -9,6 +9,12 @@ TabDialog::TabDialog(const QString &fileName, QWidget *parent)
 
     QFileInfo fileInfo(fileName);
 
+    QRegularExpression regex("^[a-zA-Z0-9_//.-@]*$");
+    QValidator *validator = new QRegularExpressionValidator(regex, this);
+
+    backupNameLabel = new QLabel(tr("Name:"));
+    backupNameEdit = new QLineEdit (fileInfo.fileName());
+    backupNameEdit->setValidator(validator);
 
     QPushButton *addTabButton = new QPushButton(tr("Create new backup session"));
     connect(addTabButton, SIGNAL(clicked()), this, SLOT(on_pushButton_clicked()));
@@ -24,11 +30,17 @@ TabDialog::TabDialog(const QString &fileName, QWidget *parent)
 
     QVBoxLayout *mainLayout = new QVBoxLayout;
 
+    QHBoxLayout *horizLayout = new QHBoxLayout;
     stackedWidget = new QStackedWidget;
+
+
+    horizLayout->addWidget(backupNameLabel);
+    horizLayout->addWidget(backupNameEdit);
+    horizLayout->addWidget(buttonBox);
 
     mainLayout->addWidget(bar);
     mainLayout->addWidget(stackedWidget);
-    mainLayout->addWidget(buttonBox);
+    mainLayout->addLayout(horizLayout);
 
     mainLayout->setAlignment(Qt::AlignTop);
 
@@ -44,16 +56,28 @@ TabDialog::TabDialog(const QString &fileName, QWidget *parent)
 
     setWindowTitle(tr("QtBorg"));
 
-    setGeometry(geometry().x(),geometry().y(), 600, 400);
+    setGeometry(geometry().x(),geometry().y(), 1200, 900);
 
 }
 
 
 void TabDialog::on_pushButton_clicked()
 {
-    bar->addTab("One");
-    QFileInfo fileInfo("");
-    stackedWidget->addWidget(new GeneralTab(fileInfo));
+    QString tabName("");
+    ++m_NuberCounter;
+    if(backupNameEdit->text().trimmed().isEmpty() ||
+       backupNameEdit->text().trimmed().length() > 16)
+    {
+       tabName =  QString("Backup") + QString::number(m_NuberCounter);
+    }
+    else
+    {
+        tabName = backupNameEdit->text().trimmed();
+    }
+
+    bar->addTab(tabName);
+
+    stackedWidget->addWidget(new GeneralTab(tabName));
 }
 
 
@@ -72,3 +96,4 @@ QComboBox *TabDialog::createComboBox(const QString &text)
     comboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     return comboBox;
 }
+

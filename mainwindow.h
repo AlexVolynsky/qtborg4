@@ -11,6 +11,8 @@ class QStackedWidget;
 class QTabBar;
 class GeneralTab;
 class QDialogButtonBox;
+class QLabel;
+class QLineEdit;
 QT_END_NAMESPACE
 
 
@@ -35,6 +37,8 @@ private:
     QStackedWidget *stackedWidget;
     QTabBar *bar;
     GeneralTab *tabWidget;
+    QLabel *backupNameLabel;
+    QLineEdit *backupNameEdit;
     QDialogButtonBox *buttonBox;
 
 };

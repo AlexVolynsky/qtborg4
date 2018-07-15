@@ -20,3 +20,6 @@ HEADERS  += mainwindow.h \
     generaltab.h
 
 FORMS    +=
+
+DISTFILES += \
+    README.md
