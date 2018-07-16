@@ -19,6 +19,8 @@ Contributors
 You only need to download the files (https://github.com/AlexVolynsky/qtborg4) :
     generaltab.cpp
     generaltab.h
+    loggingcategories.cpp
+    loggingcategories.h
     main.cpp
     mainwindow.cpp
     mainwindow.h
