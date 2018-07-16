@@ -16,7 +16,13 @@ class QCheckBox;
 class QTabWidget;
 class QDateTimeEdit;
 class QSpinBox;
+class OptionalArgumentsTab;
+class CommonOptionsTab;
+class ExclusionOptionsTab;
+class FilesystemOptionsTab;
+class ArchiveOptionsTab;
 QT_END_NAMESPACE
+
 
 /*! The GeneralTab class that contains all the fields for working with the BorgBackup for a specific backup.
 A object of this type should be dynamically created.
@@ -31,6 +37,7 @@ public:
 private:
     QPushButton *createButton(const QString &text, const char *member);
     QComboBox *createComboBox(const QString &text = QString());
+    void createArgumentsStringOfBorgBackup (QStringList& arguments);
 
 private slots:
     void browseSrc();
@@ -48,6 +55,13 @@ private:
     QComboBox *directorySrcComboBox;
     QComboBox *directoryDstComboBox;
     QTabWidget *optionsTabWidget;
+
+    OptionalArgumentsTab* optionalArgumentsTab;
+    CommonOptionsTab*     commonOptionsTab;
+    ExclusionOptionsTab*  exclusionOptionsTab;
+    FilesystemOptionsTab* filesystemOptionsTab;
+    ArchiveOptionsTab*    archiveOptionsTab;
+
     QPushButton *toDoBackupButton;
 };
 
@@ -58,6 +72,8 @@ private:
 class OptionalArgumentsTab : public QWidget
 {
     Q_OBJECT
+
+    friend class GeneralTab;
 
 public:
     explicit OptionalArgumentsTab(QWidget *parent = 0);
@@ -79,6 +95,8 @@ class CommonOptionsTab : public QWidget
 {
     Q_OBJECT
 
+    friend class GeneralTab;
+
 public:
     explicit CommonOptionsTab(QWidget *parent = 0);
 
@@ -90,6 +108,8 @@ public:
 class ExclusionOptionsTab : public QWidget
 {
     Q_OBJECT
+
+    friend class GeneralTab;
 
 public:
     explicit ExclusionOptionsTab(QWidget *parent = 0);
@@ -103,15 +123,11 @@ private:
     QLineEdit *include_excludePathsMatchingPATTERNEdit;
     QLabel    *readIncludeEexcludePatternsFromPATTERNFILELabel;
     QLineEdit *readIncludeEexcludePatternsFromPATTERNFILEEdit;
-    QLabel    *excludeDirectoriesThatContainCACHEDIRfileLabel;
-    QLineEdit *excludeDirectoriesThatContainCACHEDIRfileEdit;
+    QCheckBox *excludeDirectoriesThatContainCACHEDIRfileCheckBox ;
     QLabel    *excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMELabel;
     QLineEdit *excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMEEdit;
-    QLabel    *ifTagObjectsSpecifiedWithExcludeifpresentLabel;
-    QLineEdit *ifTagObjectsSpecifiedWithExcludeifpresentEdit;
-    QLabel    *excludeFilesFlaggedNODUMPLabel;
-    QLineEdit *excludeFilesFlaggedNODUMPEdit;
-
+    QCheckBox *ifTagObjectsSpecifiedWithExcludeifpresentCheckBox;
+    QCheckBox *excludeFilesFlaggedNODUMPCheckBox;
 };
 
 
@@ -121,28 +137,21 @@ class FilesystemOptionsTab : public QWidget
 {
     Q_OBJECT
 
+    friend class GeneralTab;
+
 public:
     explicit FilesystemOptionsTab(QWidget *parent = 0);
 
 private:
-    QLabel    *stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsLabel;
-    QLineEdit *stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsEdit;
-    QLabel    *onlyStoreNumericUserAndGroupIdentifiersLabel;
-    QLineEdit *onlyStoreNumericUserAndGroupIdentifiersEdit;
-    QLabel    *doNotStoreAtimeIntoArchiveLabel;
-    QLineEdit *doNotStoreAtimeIntoArchiveEdit;
-    QLabel    *doNotStoreCtimeIntoArchiveLabel;
-    QLineEdit *doNotStoreCtimeIntoArchiveEdit;
-    QLabel    *doNotStoreBirthtimeIntoArchiveLabel;
-    QLineEdit *doNotStoreBirthtimeIntoArchiveEdit;
-    QLabel    *doNotReadAndStoreBsdflagsIntoArchiveLabel;
-    QLineEdit *doNotReadAndStoreBsdflagsIntoArchiveEdit;
-    QLabel    *ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesLabel;
-    QLineEdit *ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesEdit;
-    QLabel    *operateFilesCacheInMODELabel;
-    QLineEdit *operateFilesCacheInMODEEdit;
-    QLabel    *openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsLabel;
-    QLineEdit *openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsEdit;
+    QCheckBox *stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsCheckBox;
+    QCheckBox *onlyStoreNumericUserAndGroupIdentifiersCheckBox;
+    QCheckBox *doNotStoreAtimeIntoArchiveCheckBox;
+    QCheckBox *doNotStoreCtimeIntoArchiveCheckBox;
+    QCheckBox *doNotStoreBirthtimeIntoArchiveCheckBox;
+    QCheckBox *doNotReadAndStoreBsdflagsIntoArchiveCheckBox;
+    QCheckBox *ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesCheckBox;
+    QCheckBox *operateFilesCacheInMODECheckBox;
+    QCheckBox *openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsCheckBox;
 };
 
 /*! The ArchiveOptionsTab class that contains all the fields for working with archive options.
@@ -150,6 +159,8 @@ private:
 class ArchiveOptionsTab : public QWidget
 {
     Q_OBJECT
+
+    friend class GeneralTab;
 
 public:
     explicit ArchiveOptionsTab(QWidget *parent = 0);
@@ -165,6 +176,7 @@ private:
     QLineEdit *specifyTheChunkerParametersEdit;
     QLabel    *selectCompressionAlgorithmLabel;
     QLineEdit *selectCompressionAlgorithmEdit;
+    int       defaultSecondsForCheckpoint;
 };
 
 

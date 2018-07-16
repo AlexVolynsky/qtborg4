@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "generaltab.h"
+#include "loggingcategories.h"
 #include <QtWidgets>
 
 

@@ -14,10 +14,12 @@ CONFIG += c++11
 
 SOURCES += main.cpp\
         mainwindow.cpp \
-    generaltab.cpp
+    generaltab.cpp \
+    loggingcategories.cpp
 
 HEADERS  += mainwindow.h \
-    generaltab.h
+    generaltab.h \
+    loggingcategories.h
 
 FORMS    +=
 

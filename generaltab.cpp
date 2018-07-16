@@ -1,5 +1,5 @@
 #include "generaltab.h"
-
+#include "loggingcategories.h"
 #include <QtWidgets>
 
 GeneralTab::GeneralTab(const QFileInfo &fileInfo, QWidget *parent)
@@ -18,13 +18,18 @@ GeneralTab::GeneralTab(const QFileInfo &fileInfo, QWidget *parent)
     directoryDstComboBox = createComboBox();
     browseDstButton = createButton(tr("&Browse repository location..."), SLOT(browseDst()));
 
+    optionalArgumentsTab = new OptionalArgumentsTab();
+    commonOptionsTab = new CommonOptionsTab();
+    exclusionOptionsTab = new ExclusionOptionsTab();
+    filesystemOptionsTab = new FilesystemOptionsTab();
+    archiveOptionsTab = new ArchiveOptionsTab();
 
     optionsTabWidget = new QTabWidget(this);
-    optionsTabWidget->addTab(new OptionalArgumentsTab(optionsTabWidget), tr("Optional Arguments"));
-    optionsTabWidget->addTab(new CommonOptionsTab(optionsTabWidget), tr("Common Options"));
-    optionsTabWidget->addTab(new ExclusionOptionsTab(optionsTabWidget), tr("Exclusion Options"));
-    optionsTabWidget->addTab(new FilesystemOptionsTab(optionsTabWidget), tr("Filesystem Options"));
-    optionsTabWidget->addTab(new ArchiveOptionsTab(optionsTabWidget), tr("Filesystem Options"));
+    optionsTabWidget->addTab(optionalArgumentsTab, tr("Optional Arguments"));
+    optionsTabWidget->addTab(commonOptionsTab,     tr("Common Options"));
+    optionsTabWidget->addTab(exclusionOptionsTab,  tr("Exclusion Options"));
+    optionsTabWidget->addTab(filesystemOptionsTab, tr("Filesystem Options"));
+    optionsTabWidget->addTab(archiveOptionsTab,    tr("Archive Options"));
 
     toDoBackupButton = createButton(tr("&START BACKUP"), SLOT(backup()));
 
@@ -77,26 +82,36 @@ void GeneralTab::browseDst()
 
 void GeneralTab::backup()
 {
-    #ifndef __linux__
+    qInfo(logInfo()) << "GeneralTab::backup()";
 
-        QProcess proc;
+    QStringList  arguments;
 
-        //Let's create a repo on an external drive
-        proc.start ("/bin/bash", QStringList() << "brog init --encryption=repokey " << directoryDstComboBox->currentText());
-        proc.waitForStarted();
-        proc.waitForBytesWritten();
-        proc.waitForFinished();
-        //qDebug() << proc.readAll();
+    createArgumentsStringOfBorgBackup (arguments);
 
-        //So now, let's create our first (compressed) backup
-        proc.start ("/bin/bash", QStringList() << "brog create --stats --progress --compression lz4 "
-                                      << directoryDstComboBox->currentText()<<"::"
-                                      << BackupNameEdit->text() << " "
-                                      << directorySrcComboBox->currentText());
-        proc.waitForBytesWritten();
-        proc.waitForFinished();
-        //qDebug() << proc.readAll();
-        proc.close();
+
+
+    /*  Now we have something like that:
+     *
+        borg create --one-file-system --compression zstd,15 \
+        $server:borg::$(date +%Y-%m-%dT%H-%M-%S)-home $HOME \
+        --exclude-caches --exclude-if-present CMakeCache.txt \
+        --verbose --progress
+    */
+
+    qDebug() <<"The command" << arguments;
+    qInfo(logInfo()) <<"The command" << arguments;;
+
+    #ifndef W_OS_LINUX
+
+//        QProcess process;
+//        process.setProgram("/bin/bash");
+//        process.setArguments(arguments);
+//        //process.setWorkingDirectory(DirPath);
+//        process.setStandardOutputFile(QProcess::nullDevice());
+//        process.setStandardErrorFile(QProcess::nullDevice());
+//        qint64 pid;
+//        bool result_of_Buckup = process.startDetached(&pid);
+//        qDebug() <<"Result of the buckup :" << result_of_Buckup;
 
     #else
         QMessageBox msgBox;
@@ -124,18 +139,204 @@ QComboBox *GeneralTab::createComboBox(const QString &text)
     return comboBox;
 }
 
-/////////////////////////////////////////////////////////////////
+void GeneralTab::createArgumentsStringOfBorgBackup(QStringList& arguments)
+{
+    qInfo(logInfo()) << "GeneralTab::createArgumentsStringOfBorgBackup";
+
+    QDateTime now = QDateTime::currentDateTime();
+    int offset = now.offsetFromUtc();
+    now.setOffsetFromUtc(offset);
+
+    //Let's prepare string repository like this: $server:borg::$(date +%Y-%m-%dT%H-%M-%S)-home $HOME
+    QString strRepository = directoryDstComboBox->currentText() + now.toString(Qt::ISODate);
+
+    QString strSourceDirs = directorySrcComboBox->currentText();
+
+    arguments << "borg create";
+    arguments << strRepository;
+    arguments << strSourceDirs;
+
+
+    //Try to check the 'Optional arguments' tab
+    if(optionalArgumentsTab->doNotCreateBackupArchiveCheckBox->isChecked())
+    {
+        arguments << "-n";
+    }
+
+    if(optionalArgumentsTab->printStatisticsForTheCreatedArchiveCheckBox->isChecked())
+    {
+        arguments << "-s";
+    }
+
+    if(optionalArgumentsTab->outputVerboseListOfItemsCheckBox->isChecked())
+    {
+        arguments << "--list";
+    }
+
+    if(optionalArgumentsTab->outputStatsAsJSONCheckBox->isChecked())
+    {
+        arguments << "--json";
+    }
+
+    if(optionalArgumentsTab->doNotSynchronizeTheCacheUsedToDetectCheckBox->isChecked())
+    {
+        arguments << "--no-cache-sync";
+    }
+
+    if(optionalArgumentsTab->doNotLoadUpdateTheFilesMetadataCacheUsedToDetectUnchangedFilesCheckBox->isChecked())
+    {
+        arguments << "--no-files-cache";
+    }
+
+    //Try to check the 'Exclusion options' tab
+    if(!exclusionOptionsTab->excludePathsMatchingPATTERNEdit->text().trimmed().isEmpty())
+    {
+        QString dataFromLineEdit1 = exclusionOptionsTab->excludePathsMatchingPATTERNEdit->text().trimmed();
+        QStringList subListArguments1 = dataFromLineEdit1.split(",",QString::SkipEmptyParts);
+
+        for(int i=0; i < subListArguments1.size(); ++i)
+        {
+            arguments << "--exclude" << subListArguments1.at(i);
+        }
+    }
+
+    if(!exclusionOptionsTab->readExcludePatternsFromEXCLUDEFILEEdit->text().trimmed().isEmpty())
+    {
+        QString dataFromLineEdit2 = exclusionOptionsTab->excludePathsMatchingPATTERNEdit->text().trimmed();
+        QStringList subListArguments2 = dataFromLineEdit2.split(",",QString::SkipEmptyParts);
+
+        for(int i=0; i < subListArguments2.size(); ++i)
+        {
+            arguments << "--exclude-from" << subListArguments2.at(i);
+        }
+    }
+
+    if(!exclusionOptionsTab->include_excludePathsMatchingPATTERNEdit->text().trimmed().isEmpty())
+    {
+        QString dataFromLineEdit3 = exclusionOptionsTab->include_excludePathsMatchingPATTERNEdit->text().trimmed();
+        QStringList subListArguments3 = dataFromLineEdit3.split(",",QString::SkipEmptyParts);
+
+        for(int i=0; i < subListArguments3.size(); ++i)
+        {
+            arguments << "--pattern" << subListArguments3.at(i);
+        }
+    }
+
+    if(!exclusionOptionsTab->readIncludeEexcludePatternsFromPATTERNFILEEdit->text().trimmed().isEmpty())
+    {
+        QString dataFromLineEdit4 = exclusionOptionsTab->readIncludeEexcludePatternsFromPATTERNFILEEdit->text().trimmed();
+        QStringList subListArguments4 = dataFromLineEdit4.split(",",QString::SkipEmptyParts);
+
+        for(int i=0; i < subListArguments4.size(); ++i)
+        {
+            arguments << "--patterns-from" << subListArguments4.at(i);
+        }
+    }
+
+    if(exclusionOptionsTab->excludeDirectoriesThatContainCACHEDIRfileCheckBox->isChecked())
+    {
+        arguments << "--exclude-caches";
+    }
+
+    if(!exclusionOptionsTab->excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMEEdit->text().trimmed().isEmpty())
+    {
+        QString dataFromLineEdit5 = exclusionOptionsTab->excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMEEdit->text().trimmed();
+        QStringList subListArguments5 = dataFromLineEdit5.split(",",QString::SkipEmptyParts);
+
+        for(int i=0; i < subListArguments5.size(); ++i)
+        {
+            arguments << "--exclude-if-present" << subListArguments5.at(i);
+        }
+    }
+
+    if(exclusionOptionsTab->ifTagObjectsSpecifiedWithExcludeifpresentCheckBox->isChecked())
+    {
+        arguments << "--keep-exclude-tags";
+    }
+
+    if(exclusionOptionsTab->excludeFilesFlaggedNODUMPCheckBox->isChecked())
+    {
+        arguments << "--exclude-nodump";
+    }
+
+
+    //Try to check the 'Filesystem options' tab
+    if(filesystemOptionsTab->stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsCheckBox->isChecked())
+    {
+        arguments << "--one-file-system";
+    }
+
+    if(filesystemOptionsTab->onlyStoreNumericUserAndGroupIdentifiersCheckBox->isChecked())
+    {
+        arguments << "--numeric-owner";
+    }
+
+    if(filesystemOptionsTab->doNotStoreAtimeIntoArchiveCheckBox->isChecked())
+    {
+        arguments << "--noatime";
+    }
+
+    if(filesystemOptionsTab->doNotStoreCtimeIntoArchiveCheckBox->isChecked())
+    {
+        arguments << "--noctime";
+    }
+
+    if(filesystemOptionsTab->doNotStoreBirthtimeIntoArchiveCheckBox->isChecked())
+    {
+        arguments << "--nobirthtime";
+    }
+
+    if(filesystemOptionsTab->doNotReadAndStoreBsdflagsIntoArchiveCheckBox->isChecked())
+    {
+        arguments << "--nobsdflags";
+    }
+
+    if(filesystemOptionsTab->ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesCheckBox->isChecked())
+    {
+        arguments << "--ignore-inode";
+    }
+
+    if(filesystemOptionsTab->openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsCheckBox->isChecked())
+    {
+        arguments << "--read-special";
+    }
+
+    //Try to check the 'Archive options' tab
+    if(!archiveOptionsTab->addCommentTextToTheArchiveEdit->text().trimmed().isEmpty())
+    {
+        arguments << "--comment" << archiveOptionsTab->addCommentTextToTheArchiveEdit->text().trimmed();
+    }
+
+    if(archiveOptionsTab->writeCheckpointEverySecondsSpinBox->value()!= archiveOptionsTab->defaultSecondsForCheckpoint)
+    {
+        arguments << "-c" << QString::number(archiveOptionsTab->writeCheckpointEverySecondsSpinBox->value());
+    }
+
+    if(!archiveOptionsTab->specifyTheChunkerParametersEdit->text().trimmed().isEmpty())
+    {
+        arguments << "--chunker-params" << archiveOptionsTab->specifyTheChunkerParametersEdit->text().trimmed();
+    }
+
+    if(!archiveOptionsTab->selectCompressionAlgorithmEdit->text().trimmed().isEmpty())
+    {
+        arguments << "-C" << archiveOptionsTab->selectCompressionAlgorithmEdit->text().trimmed();
+    }
+
+}
+
+//////////////////////////// Optional arguments of "borg create" /////////////////////////////////////
+
 OptionalArgumentsTab::OptionalArgumentsTab(QWidget *parent)
     : QWidget(parent)
 {
-    doNotCreateBackupArchiveCheckBox = new QCheckBox(tr("Do not create backup archive"));
-    printStatisticsForTheCreatedArchiveCheckBox = new QCheckBox(tr("Print statistics for the created archive"));
-    outputVerboseListOfItemsCheckBox = new QCheckBox(tr("Output verbose list of items (files,dirs,...)"));
-    onlyDisplayItemsWithTheGivenStatusCharactersCheckBox = new QCheckBox(tr("Only display items with the given status characters"));
-    outputStatsAsJSONCheckBox = new QCheckBox(tr("Output stats as JSON"));
-    doNotSynchronizeTheCacheUsedToDetectCheckBox = new QCheckBox(tr("Do not synchronize the cache used to detect"));
-    doNotLoadUpdateTheFilesMetadataCacheUsedToDetectUnchangedFilesCheckBox = new QCheckBox(tr("Do not load update the files metadata cache used to detect unchanged files"));
-    useNameInArchiveForSTDINDataCheckBox = new QCheckBox(tr("use NAME in archive for stdin data"));
+    doNotCreateBackupArchiveCheckBox = new QCheckBox(tr("do not create backup archive"));
+    printStatisticsForTheCreatedArchiveCheckBox = new QCheckBox(tr("print statistics for the created archive"));
+    outputVerboseListOfItemsCheckBox = new QCheckBox(tr("output verbose list of items (files,dirs,...)"));
+    onlyDisplayItemsWithTheGivenStatusCharactersCheckBox = new QCheckBox(tr("only display items with the given status characters"));
+    outputStatsAsJSONCheckBox = new QCheckBox(tr("output stats as JSON"));
+    doNotSynchronizeTheCacheUsedToDetectCheckBox = new QCheckBox(tr("do not synchronize the cache used to detect"));
+    doNotLoadUpdateTheFilesMetadataCacheUsedToDetectUnchangedFilesCheckBox = new QCheckBox(tr("do not load update the files metadata cache used to detect unchanged files"));
+    useNameInArchiveForSTDINDataCheckBox = new QCheckBox(tr("use NAME in archive for stdin data (default: “stdin”)"));
 
     QVBoxLayout *checkboxLayout = new QVBoxLayout;
     checkboxLayout->addWidget(doNotCreateBackupArchiveCheckBox);
@@ -168,9 +369,6 @@ ExclusionOptionsTab::ExclusionOptionsTab(QWidget *parent)
     QHBoxLayout* horizonLayout3 = new QHBoxLayout;
     QHBoxLayout* horizonLayout4 = new QHBoxLayout;
     QHBoxLayout* horizonLayout5 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout6 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout7 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout8 = new QHBoxLayout;
 
     excludePathsMatchingPATTERNLabel = new QLabel(tr("exclude paths matching PATTERN"));
     excludePathsMatchingPATTERNEdit  = new QLineEdit ();
@@ -192,34 +390,25 @@ ExclusionOptionsTab::ExclusionOptionsTab(QWidget *parent)
     horizonLayout4->addWidget(readIncludeEexcludePatternsFromPATTERNFILELabel);
     horizonLayout4->addWidget(readIncludeEexcludePatternsFromPATTERNFILEEdit);
 
-    excludeDirectoriesThatContainCACHEDIRfileLabel = new QLabel(tr("exclude directories that contain a CACHEDIR.TAG file"));
-    excludeDirectoriesThatContainCACHEDIRfileEdit  = new QLineEdit ();
-    horizonLayout5->addWidget(excludeDirectoriesThatContainCACHEDIRfileLabel);
-    horizonLayout5->addWidget(excludeDirectoriesThatContainCACHEDIRfileEdit);
+    excludeDirectoriesThatContainCACHEDIRfileCheckBox = new QCheckBox(tr("exclude directories that contain a CACHEDIR.TAG file"));
 
     excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMELabel = new QLabel(tr("exclude directories that are tagged by containing a filesystem object with the given NAME"));
     excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMEEdit  = new QLineEdit ();
-    horizonLayout6->addWidget(excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMELabel);
-    horizonLayout6->addWidget(excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMEEdit);
+    horizonLayout5->addWidget(excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMELabel);
+    horizonLayout5->addWidget(excludeDirsThatAreTaggedByContainingFilesystemObjectWithTheGivenNAMEEdit);
 
-    ifTagObjectsSpecifiedWithExcludeifpresentLabel = new QLabel(tr("if tag objects are specified with --exclude-if-present, don’t omit the tag objects themselves from the backup archive"));
-    ifTagObjectsSpecifiedWithExcludeifpresentEdit  = new QLineEdit ();
-    horizonLayout7->addWidget(ifTagObjectsSpecifiedWithExcludeifpresentLabel);
-    horizonLayout7->addWidget(ifTagObjectsSpecifiedWithExcludeifpresentEdit);
+    ifTagObjectsSpecifiedWithExcludeifpresentCheckBox = new QCheckBox(tr("if tag objects are specified with the previous item, don’t omit the tag objects themselves from the backup archive"));
 
-    excludeFilesFlaggedNODUMPLabel = new QLabel(tr("exclude files flagged NODUMP"));
-    excludeFilesFlaggedNODUMPEdit  = new QLineEdit ();
-    horizonLayout8->addWidget(excludeFilesFlaggedNODUMPLabel);
-    horizonLayout8->addWidget(excludeFilesFlaggedNODUMPEdit);
+    excludeFilesFlaggedNODUMPCheckBox = new QCheckBox(tr("exclude files flagged NODUMP"));
 
     mainLayout->addLayout(horizonLayout1);
     mainLayout->addLayout(horizonLayout2);
     mainLayout->addLayout(horizonLayout3);
     mainLayout->addLayout(horizonLayout4);
+    mainLayout->addWidget(excludeDirectoriesThatContainCACHEDIRfileCheckBox);
     mainLayout->addLayout(horizonLayout5);
-    mainLayout->addLayout(horizonLayout6);
-    mainLayout->addLayout(horizonLayout7);
-    mainLayout->addLayout(horizonLayout8);
+    mainLayout->addWidget(ifTagObjectsSpecifiedWithExcludeifpresentCheckBox);
+    mainLayout->addWidget(excludeFilesFlaggedNODUMPCheckBox);
 
     mainLayout->addStretch(1);
 
@@ -229,81 +418,33 @@ ExclusionOptionsTab::ExclusionOptionsTab(QWidget *parent)
 FilesystemOptionsTab::FilesystemOptionsTab(QWidget *parent)
     : QWidget(parent)
 {
-    QVBoxLayout *mainLayout = new QVBoxLayout;
+    stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsCheckBox = new QCheckBox(tr("stay in the same file system and do not store mount points of other file systems"));
+    onlyStoreNumericUserAndGroupIdentifiersCheckBox = new QCheckBox(tr("only store numeric user and group identifiers"));
+    doNotStoreAtimeIntoArchiveCheckBox = new QCheckBox(tr("do not store atime into archive"));
+    doNotStoreCtimeIntoArchiveCheckBox = new QCheckBox(tr("do not store ctime into archive"));
+    doNotStoreBirthtimeIntoArchiveCheckBox = new QCheckBox(tr("do not store birthtime (creation date) into archive"));
+    doNotReadAndStoreBsdflagsIntoArchiveCheckBox = new QCheckBox(tr("do not read and store bsdflags (e.g. NODUMP, IMMUTABLE) into archive"));
+    ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesCheckBox = new QCheckBox(tr("ignore inode data in the file metadata cache used to detect unchanged files"));;
+    operateFilesCacheInMODECheckBox = new QCheckBox(tr("operate files cache in MODE. default: ctime,size,inode"));
+    openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsCheckBox = new QCheckBox(tr("open and read block and char device files as well as FIFOs as if they were regular files. Also follows symlinks pointing to these kinds of files"));
 
-    QHBoxLayout* horizonLayout1 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout2 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout3 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout4 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout5 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout6 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout7 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout8 = new QHBoxLayout;
-    QHBoxLayout* horizonLayout9 = new QHBoxLayout;
+    QVBoxLayout *checkboxLayout = new QVBoxLayout;
+    checkboxLayout->addWidget(stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsCheckBox);
+    checkboxLayout->addWidget(onlyStoreNumericUserAndGroupIdentifiersCheckBox);
+    checkboxLayout->addWidget(doNotStoreAtimeIntoArchiveCheckBox);
+    checkboxLayout->addWidget(doNotStoreCtimeIntoArchiveCheckBox);
+    checkboxLayout->addWidget(doNotStoreBirthtimeIntoArchiveCheckBox);
+    checkboxLayout->addWidget(doNotReadAndStoreBsdflagsIntoArchiveCheckBox);
+    checkboxLayout->addWidget(ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesCheckBox);
+    checkboxLayout->addWidget(operateFilesCacheInMODECheckBox);
+    checkboxLayout->addWidget(openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsCheckBox);
+    checkboxLayout->addStretch(1);
 
-    stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsLabel = new QLabel(tr("stay in the same file system and do not store mount points of other file systems"));
-    stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsEdit  = new QLineEdit ();
-    horizonLayout1->addWidget(stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsLabel);
-    horizonLayout1->addWidget(stayInSameFileSystemAndDoNotStoreMountPointsOfOtherFileSystemsEdit);
-
-    onlyStoreNumericUserAndGroupIdentifiersLabel = new QLabel(tr("only store numeric user and group identifiers"));
-    onlyStoreNumericUserAndGroupIdentifiersEdit  = new QLineEdit ();
-    horizonLayout2->addWidget(onlyStoreNumericUserAndGroupIdentifiersLabel);
-    horizonLayout2->addWidget(onlyStoreNumericUserAndGroupIdentifiersEdit);
-
-    doNotStoreAtimeIntoArchiveLabel = new QLabel(tr("do not store atime into archive"));
-    doNotStoreAtimeIntoArchiveEdit  = new QLineEdit ();
-    horizonLayout3->addWidget(doNotStoreAtimeIntoArchiveLabel);
-    horizonLayout3->addWidget(doNotStoreAtimeIntoArchiveEdit);
-
-    doNotStoreCtimeIntoArchiveLabel = new QLabel(tr("do not store ctime into archive"));
-    doNotStoreCtimeIntoArchiveEdit  = new QLineEdit ();
-    horizonLayout4->addWidget(doNotStoreCtimeIntoArchiveLabel);
-    horizonLayout4->addWidget(doNotStoreCtimeIntoArchiveEdit);
-
-    doNotStoreBirthtimeIntoArchiveLabel = new QLabel(tr("do not store birthtime (creation date) into archive"));
-    doNotStoreBirthtimeIntoArchiveEdit  = new QLineEdit ();
-    horizonLayout5->addWidget(doNotStoreBirthtimeIntoArchiveLabel);
-    horizonLayout5->addWidget(doNotStoreBirthtimeIntoArchiveEdit);
-
-    doNotReadAndStoreBsdflagsIntoArchiveLabel = new QLabel(tr("do not read and store bsdflags (e.g. NODUMP, IMMUTABLE) into archive"));
-    doNotReadAndStoreBsdflagsIntoArchiveEdit  = new QLineEdit ();
-    horizonLayout6->addWidget(doNotReadAndStoreBsdflagsIntoArchiveLabel);
-    horizonLayout6->addWidget(doNotReadAndStoreBsdflagsIntoArchiveEdit);
-
-    ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesLabel = new QLabel(tr("ignore inode data in the file metadata cache used to detect unchanged files"));
-    ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesEdit  = new QLineEdit ();
-    horizonLayout7->addWidget(ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesLabel);
-    horizonLayout7->addWidget(ignoreInodeDataInTheFileMetadataCacheUsedToDetectUnchangedFilesEdit);
-
-    operateFilesCacheInMODELabel = new QLabel(tr("operate files cache in MODE. default: ctime,size,inode"));
-    operateFilesCacheInMODEEdit  = new QLineEdit ();
-    horizonLayout8->addWidget(operateFilesCacheInMODELabel);
-    horizonLayout8->addWidget(operateFilesCacheInMODEEdit);
-
-    openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsLabel = new QLabel(tr("open and read block and char device files as well as FIFOs as if they were regular files. Also follows symlinks pointing to these kinds of files"));
-    openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsEdit  = new QLineEdit ();
-    horizonLayout9->addWidget(openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsLabel);
-    horizonLayout9->addWidget(openAndReadBlockAndCharDeviceFilesAsWellAsFIFOsEdit);
-
-    mainLayout->addLayout(horizonLayout1);
-    mainLayout->addLayout(horizonLayout2);
-    mainLayout->addLayout(horizonLayout3);
-    mainLayout->addLayout(horizonLayout4);
-    mainLayout->addLayout(horizonLayout5);
-    mainLayout->addLayout(horizonLayout6);
-    mainLayout->addLayout(horizonLayout7);
-    mainLayout->addLayout(horizonLayout8);
-    mainLayout->addLayout(horizonLayout9);
-
-    mainLayout->addStretch(1);
-
-    setLayout(mainLayout);
-
+    setLayout(checkboxLayout);
 }
 
 ArchiveOptionsTab::ArchiveOptionsTab(QWidget *parent)
-    : QWidget(parent)
+    : QWidget(parent),defaultSecondsForCheckpoint(1800)
 {
     QVBoxLayout *mainLayout = new QVBoxLayout;
 
@@ -332,7 +473,7 @@ ArchiveOptionsTab::ArchiveOptionsTab(QWidget *parent)
     writeCheckpointEverySecondsSpinBox->setMinimum(0);
     writeCheckpointEverySecondsSpinBox->setMaximum(10000000);
     writeCheckpointEverySecondsSpinBox->setSingleStep(1);
-    writeCheckpointEverySecondsSpinBox->setValue(1800);
+    writeCheckpointEverySecondsSpinBox->setValue(defaultSecondsForCheckpoint);
     horizonLayout3->addWidget(writeCheckpointEverySecondsLabel);
     horizonLayout3->addWidget(writeCheckpointEverySecondsSpinBox);
 
